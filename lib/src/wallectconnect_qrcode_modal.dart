@@ -23,9 +23,10 @@ class WalletConnectQrCodeModal {
   /// Connect to a new session.
   /// [context] is needed to show the QR code dialog.
   Future<SessionStatus?> connect(
-    BuildContext context, {
-    int? chainId,
-  }) async {
+      BuildContext context, {
+        int? chainId,
+        Widget Function(BuildContext, Widget)? builder,
+      }) async {
     if (_connector.connected) {
       return SessionStatus(
         chainId: _connector.session.chainId,
@@ -33,7 +34,11 @@ class WalletConnectQrCodeModal {
       );
     }
 
-    return await _createSessionWithModal(context, chainId: chainId);
+    return await _createSessionWithModal(
+      context,
+      chainId: chainId,
+      builder: builder,
+    );
   }
 
   /// Send custom request with [method], [params] and optional [topic].
@@ -88,13 +93,14 @@ class WalletConnectQrCodeModal {
   }) : _connector = connector;
 
   Future<SessionStatus?> _createSessionWithModal(
-    BuildContext context, {
-    int? chainId,
-  }) async {
+      BuildContext context, {
+        int? chainId,
+        Widget Function(BuildContext, Widget)? builder,
+    }) async {
     bool isDismissed = false;
     bool isError = false;
     bool sessionCreated = false;
-
+    late BuildContext _dialogContext;
     // clear previous selected wallet data
     _wallet = null;
     _uri = null;
@@ -108,14 +114,19 @@ class WalletConnectQrCodeModal {
             chainId: chainId,
             onDisplayUri: (uri) async {
               _uri = uri;
+              final modal = ModalMainPage(
+                uri: uri,
+                walletCallback: (wallet) => _wallet = wallet,
+              );
               await showDialog(
                   context: context,
                   useSafeArea: true,
                   barrierDismissible: true,
-                  builder: (context) => ModalMainPage(
-                        uri: uri,
-                        walletCallback: (wallet) => _wallet = wallet,
-                      ));
+                  builder: (context) {
+                    _dialogContext = context;
+                    if (builder != null) return builder(context, modal);
+                    return modal;
+                  });
 
               isDismissed = true;
               if (!sessionCreated && !isError) {
@@ -127,7 +138,7 @@ class WalletConnectQrCodeModal {
         return session;
       } catch (e) {
         isError = true;
-        Navigator.of(context).pop();
+        Navigator.of(_dialogContext).pop();
         rethrow;
       }
     }
@@ -137,7 +148,7 @@ class WalletConnectQrCodeModal {
     cancelableCompleter.operation.value.then((session) {
       sessionCreated = true;
       if (!isDismissed) {
-        Navigator.of(context).pop();
+        Navigator.of(_dialogContext).pop();
       }
       if (!completer.isCompleted) {
         completer.complete(session);
